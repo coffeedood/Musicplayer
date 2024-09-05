@@ -1,0 +1,230 @@
+import tkinter as tk
+from tkinter import messagebox
+import json
+import os
+
+PROFILES_FILE = "profiles.json"
+profiles = []
+
+# Function to save data to JSON
+def save_to_json(data, filename):
+    try:
+        with open(filename, 'w') as file:
+            json.dump(data, file, indent=4)
+    except IOError:
+        messagebox.showerror("Error", "Could not save data to file.")
+
+# Function to load data from JSON
+def load_from_json(filename):
+    if os.path.exists(filename):
+        try:
+            with open(filename, 'r') as file:
+                data = json.load(file)
+                # Ensure data is a list of dictionaries
+                if isinstance(data, list):
+                    return [p for p in data if isinstance(p, dict)]
+        except IOError:
+            messagebox.showerror("Error", "Could not load data from file.")
+    return []
+
+# Function to update the banking info label based on the profile
+def update_banking_info_label(profile):
+    if profile and 'banking_info' in profile and profile['banking_info']:
+        banking_info_label.config(text="✔ Banking Info Completed", fg="green")
+    else:
+        banking_info_label.config(text="✘ Banking Info Incomplete", fg="red")
+
+# Function to update the credit/debts label based on the profile
+def update_credit_debts_label(profile):
+    if profile and 'credit_debts' in profile and profile['credit_debts']:
+        credit_debts_label.config(text="✔ Credit/Debts Completed", fg="green")
+    else:
+        credit_debts_label.config(text="✘ Credit/Debts Incomplete", fg="red")
+
+# Function to open the window for managing credit/debts
+def open_credit_debts_window(profile_name):
+    profile = next((p for p in profiles if isinstance(p, dict) and p['name'] == profile_name), None)
+    if not profile:
+        messagebox.showwarning("Profile Not Found", f"Profile '{profile_name}' not found.")
+        return
+
+    credit_debts_window = tk.Toplevel()
+    credit_debts_window.title(f"Credit/Debts for Profile: {profile_name}")
+
+    credits_list = tk.Listbox(credit_debts_window, width=50, height=20)
+    credits_list.pack(side=tk.LEFT, fill=tk.Y)
+
+    scrollbar = tk.Scrollbar(credit_debts_window)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    credits_list.configure(yscrollcommand=scrollbar.set)
+    scrollbar.configure(command=credits_list.yview)
+
+    def print_credit_debts():
+        credits_list.delete(0, tk.END)
+        for credits in profile.get('credit_debts', []):
+            credits_info = f"Name: {credits['name']}, Credit Card: {credits.get('card_number', 'N/A')}, Expiry: {credits.get('expiry_date', 'N/A')}"
+            credits_list.insert(tk.END, credits_info)
+
+    def add_credits():
+        add_credits_window = tk.Toplevel()
+        add_credits_window.title("Add Credits/Debts")
+
+        tk.Label(add_credits_window, text="Name:").pack(pady=10)
+        name_entry = tk.Entry(add_credits_window)
+        name_entry.pack()
+
+        tk.Label(add_credits_window, text="Credit Card Number:").pack(pady=10)
+        card_number_entry = tk.Entry(add_credits_window)
+        card_number_entry.pack()
+
+        tk.Label(add_credits_window, text="Card Expiry Date (MM/YY):").pack(pady=10)
+        card_expiry_entry = tk.Entry(add_credits_window)
+        card_expiry_entry.pack()
+
+        def save_credits():
+            if 'credit_debts' not in profile:
+                profile['credit_debts'] = []
+            new_credits = {
+                'name': name_entry.get(),
+                'card_number': card_number_entry.get(),
+                'expiry_date': card_expiry_entry.get()
+            }
+            profile['credit_debts'].append(new_credits)
+            save_to_json(profiles, PROFILES_FILE)
+            print_credit_debts()
+            update_credit_debts_label(profile)  # Update the label when adding credits
+            add_credits_window.destroy()
+
+        tk.Button(add_credits_window, text="Save Credits/Debts", command=save_credits).pack(pady=10)
+
+    tk.Button(credit_debts_window, text="Add Credits/Debts", command=add_credits).pack(pady=10)
+    print_credit_debts()
+
+# Function to open the create profile window
+def create_profile_window():
+    create_window = tk.Toplevel()
+    create_window.title("Create Profile")
+
+    tk.Label(create_window, text="Enter Profile Name:").pack(pady=10)
+    profile_name_entry = tk.Entry(create_window)
+    profile_name_entry.pack()
+
+    def save_profile():
+        profile_name = profile_name_entry.get().strip()
+        if not profile_name:
+            messagebox.showwarning("Invalid Input", "Profile name cannot be empty.")
+            return
+        # Check if profile already exists
+        if any(p['name'] == profile_name for p in profiles):
+            messagebox.showwarning("Duplicate Profile", f"A profile with the name '{profile_name}' already exists.")
+            return
+        # Create new profile
+        new_profile = {'name': profile_name, 'banking_info': None, 'credit_debts': []}
+        profiles.append(new_profile)
+        profiles_listbox.insert(tk.END, profile_name)
+        save_to_json(profiles, PROFILES_FILE)
+        create_window.destroy()
+
+    tk.Button(create_window, text="Save Profile", command=save_profile).pack(pady=10)
+
+# Function to open the banking info window
+def open_banking_info_window():
+    selected_index = profiles_listbox.curselection()
+    if not selected_index:
+        messagebox.showwarning("No Selection", "Please select a profile first.")
+        return
+    selected_profile_name = profiles_listbox.get(selected_index[0])
+    profile = next((p for p in profiles if p['name'] == selected_profile_name), None)
+    
+    if not profile:
+        messagebox.showwarning("Profile Not Found", f"Profile '{selected_profile_name}' not found.")
+        return
+
+    banking_info_window = tk.Toplevel()
+    banking_info_window.title(f"Banking Info for {selected_profile_name}")
+
+    tk.Label(banking_info_window, text="Bank Name:").pack(pady=10)
+    bank_name_entry = tk.Entry(banking_info_window)
+    bank_name_entry.pack()
+
+    tk.Label(banking_info_window, text="Bank Location:").pack(pady=10)
+    bank_location_entry = tk.Entry(banking_info_window)
+    bank_location_entry.pack()
+
+    tk.Label(banking_info_window, text="Accounts (separate by commas):").pack(pady=10)
+    accounts_entry = tk.Entry(banking_info_window)
+    accounts_entry.pack()
+
+    tk.Label(banking_info_window, text="Other Important Info:").pack(pady=10)
+    other_info_entry = tk.Entry(banking_info_window)
+    other_info_entry.pack()
+
+    def save_banking_info():
+        banking_info = {
+            'bank_name': bank_name_entry.get(),
+            'bank_location': bank_location_entry.get(),
+            'accounts': accounts_entry.get().split(","),
+            'other_info': other_info_entry.get()
+        }
+        profile['banking_info'] = banking_info
+        save_to_json(profiles, PROFILES_FILE)
+        update_banking_info_label(profile)  # Update the banking info label
+        banking_info_window.destroy()
+
+    tk.Button(banking_info_window, text="Save Banking Info", command=save_banking_info).pack(pady=10)
+
+# Main Menu - Add labels and buttons
+
+root = tk.Tk()
+root.title("Will Management Program")
+
+# Load profiles from JSON when the program starts
+profiles = load_from_json(PROFILES_FILE)
+
+banking_info_label = tk.Label(root, text="✘ Banking Info Incomplete", fg="red")
+banking_info_label.pack(pady=10)
+
+credit_debts_label = tk.Label(root, text="✘ Credit/Debts Incomplete", fg="red")
+credit_debts_label.pack(pady=10)
+
+def on_profile_select(event):
+    selected_index = profiles_listbox.curselection()
+    if selected_index:
+        selected_profile_name = profiles_listbox.get(selected_index[0])
+        profile = next((p for p in profiles if isinstance(p, dict) and p['name'] == selected_profile_name), None)
+        if profile:
+            update_banking_info_label(profile)
+            update_credit_debts_label(profile)
+
+def delete_profile_window():
+    selected_index = profiles_listbox.curselection()
+    if not selected_index:
+        messagebox.showwarning("No Selection", "No profile selected to delete.")
+        return
+
+    selected_profile_name = profiles_listbox.get(selected_index[0])
+    confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{selected_profile_name}'?")
+    if confirm:
+        profiles[:] = [p for p in profiles if p['name'] != selected_profile_name]
+        profiles_listbox.delete(selected_index)
+        save_to_json(profiles, PROFILES_FILE)
+        update_banking_info_label(None)
+        update_credit_debts_label(None)
+
+# Profiles List
+profiles_listbox = tk.Listbox(root)
+profiles_listbox.pack(pady=10)
+profiles_listbox.bind('<<ListboxSelect>>', on_profile_select)
+
+# Load profile names into listbox
+for profile in profiles:
+    profiles_listbox.insert(tk.END, profile['name'])
+
+# Buttons for creating and managing profiles
+tk.Button(root, text="Create Profile", command=create_profile_window).pack(pady=5)
+tk.Button(root, text="Delete Profile", command=delete_profile_window).pack(pady=5)
+tk.Button(root, text="Update Banking Info", command=open_banking_info_window).pack(pady=5)
+tk.Button(root, text="Manage Credit/Debts", command=lambda: open_credit_debts_window(profiles_listbox.get(tk.ACTIVE))).pack(pady=5)
+
+root.mainloop()
